@@ -171,7 +171,7 @@ void handleCommandState(char c){
       clearScreen();
       putChar('>');
       connected_dev.state = EMPTY;
-      if (connected_dev.deviceName)
+      if (connected_dev.isIdentified)
         printCentered(connected_dev.deviceName.c_str(), ROWS);
       break;
     case  IDENTIFY:
@@ -248,6 +248,13 @@ void initCommands(){
   commands[PRINT] = "/print";
 }
 
+void resetClientData(void){
+  connected_dev.buffer.clear();
+  connected_dev.deviceIp.clear();
+  connected_dev.deviceName.clear();
+  connected_dev.isIdentified = false;
+}
+
 // ========== Setup ==========
 void setup() {
   // WiFi connect
@@ -270,10 +277,7 @@ void loop() {
   // if client disconnected
   if (client && !client.connected()) {
     client.stop();
-    connected_dev.buffer.clear();
-    connected_dev.deviceIp.clear();
-    connected_dev.deviceName.clear();
-    connected_dev.isIdentified = false;
+    resetClientData();
     showWelcomeScreen();
     WELCOME_STATE = true;
   }
@@ -285,6 +289,7 @@ void loop() {
       if (!WELCOME_STATE){
         showWelcomeScreen();
         WELCOME_STATE = true;
+        resetClientData();
       }
       return;
     }
