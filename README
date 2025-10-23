@@ -1,0 +1,56 @@
+# esp-vga-displayer
+
+A small ESP32 project that drives a VGA display and accepts simple text commands over TCP/IP. Other devices on the same network can send commands to update the VGA text output remotely.
+
+## Features
+- Drive a VGA display from an ESP32
+- Simple, line-oriented TCP protocol for clearing the screen and printing text
+- Easy to integrate with scripts or remote tools (netcat, telnet, custom clients)
+
+## Requirements
+- ESP32-based board
+- VGA adapter/hardware wired to the ESP32 (project-specific wiring not included)
+- The ESP32 must be connected to the same network as the client and reachable by IP
+
+## Protocol
+Commands are sent as lines terminated by a newline. Optionally identify the client with:
+/identify [device_name]  
+    Identify the client device with a name (optional).
+
+Supported text commands:
+- `/clear`  
+    Clears the screen.
+- `/print text`  
+    Print the rest of the line as text.
+
+Examples:
+- Clear screen:
+    ```
+    /clear
+    ```
+- Print text:
+    ```
+    /print Hello, world!
+    ```
+
+Example using netcat (replace <IP> with device IP):
+```
+nc <IP> 1337
+/clear
+/print Remote text sent from netcat
+```
+
+## Building & Flashing (PlatformIO)
+From the project root:
+- Build: `pio run`
+- Upload to device: `pio run -t upload`
+
+Ensure your platformio.ini is configured for your ESP32 board and upload port.
+
+## Tips
+- Make sure the ESP32 has an IP address and the client machine can reach it.
+- Commands are line-oriented; send a newline after each command.
+- Implement client-side retries or confirmations if you need reliability for text updates.
+
+## Contributing
+Pull requests and issues welcome. Keep changes focused and document any protocol extensions related to text handling.
