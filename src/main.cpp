@@ -2,6 +2,8 @@
 #include <ESP32Video.h>
 #include <Ressources/CodePage437_8x8.h>
 #include "images.h"
+#include "colors.h"
+#include "esp-client.h"
 
 // ========== WiFi Config ==========
 const char* ssid     = "MAKERS_IOT";
@@ -14,11 +16,6 @@ const uint16_t serverPort = 1337;
 #define BLUE  27
 #define HSYNC 32
 #define VSYNC 33
-
-
-// 
-
-#define MAX_COMMANDS 3
 
 // ========== Screen params ==========
 #define NATIVE_TEXT_MODE 0
@@ -38,47 +35,7 @@ int16_t   cursor_x, cursor_y;
 // ServerConfigs
 WiFiServer server(serverPort);
 WiFiClient client;
-
-// connected Device details:
-typedef enum COMMAND_STATE{
-  EMPTY,
-  READING,
-  SPECIFIED,
-} e_command_state;
-
-typedef enum READ_DESTANIES{
-  DEV_NAME,
-  SCREEN,
-  NONE,
-} e_read_destanies;
-
-typedef void (*CommandHandler)(void);
-
-typedef struct command{
-  String name;
-  CommandHandler handler;
-} _command;
-
-typedef struct dev {
-  String  deviceName;
-  String  deviceIp;
-  String  buffer;
-  String  command;
-  bool    isIdentified;
-  e_command_state state;
-  e_read_destanies read_into;
-} _dev;
-
 _dev  connected_dev;
-
-_command commands[MAX_COMMANDS];
-
-typedef enum COMMAND_ID{
-  IDENTIFY,
-  CLEAR,
-  PRINT,
-  UNKNOWN
-} e_command_id;
 
 void printCentered(const char* s, int16_t row);
 
@@ -93,12 +50,19 @@ void setCursor(int16_t x, int16_t y) {
   # endif
 }
 
+void  displayConnectedDeviceName(void){
+  uint8_t *rgb = textColors[connected_dev.currentColor].rgb;
+  videodisplay.setTextColor(videodisplay.RGB(0, 255, 255));
+  printCentered(connected_dev.deviceName.c_str(), ROWS);
+  videodisplay.setTextColor(videodisplay.RGB(rgb[0], rgb[1], rgb[2]));
+}
+
 void  clearScreen(bool showIdentified){
   connected_dev.buffer = "";
   setCursor(0, 0);
   videodisplay.clear();
   if (showIdentified && connected_dev.isIdentified)
-        printCentered(connected_dev.deviceName.c_str(), ROWS);
+        displayConnectedDeviceName();
 }
 
 
@@ -155,69 +119,19 @@ void printCentered(const char* s, int16_t row) {
   setCursor(cursor_x, cursor_y);
 }
 
-e_command_id  getCommandID(void){
-  uint8_t id;
-  
-  for (id = 0; id < MAX_COMMANDS; id++){
-    if (connected_dev.command == commands[id].name)
-      return (e_command_id)id;
-  }
-
-  return UNKNOWN;
-}
-
-
-void execClearScreen(void){
-  clearScreen(true);
+void  putPrompt(void){
+  uint8_t *rgb = textColors[connected_dev.currentColor].rgb;
+  videodisplay.setTextColor(videodisplay.RGB(255, 255, 255));
   putChar('>');
-  connected_dev.state = EMPTY;
+  videodisplay.setTextColor(videodisplay.RGB(rgb[0], rgb[1], rgb[2]));
 }
-
-void execIdentify(void){
-  if (connected_dev.isIdentified){
-    connected_dev.state = EMPTY;
-    return;
-  }
-  connected_dev.read_into = DEV_NAME;
-  connected_dev.deviceName = "";
-}
-
-void execPrint(void){
-  connected_dev.read_into = SCREEN;
-}
-
-void  execCommands(void) {
-  uint8_t id;
-  
-  for (id = 0; id < MAX_COMMANDS; id++){
-    if (connected_dev.command == commands[id].name){
-      commands[id].handler();
-      break;
-    }
-  }
-  if (id == UNKNOWN)
-    connected_dev.state = EMPTY;
-  connected_dev.command = "";
-}
-
-void handleCommandState(char c){
-  e_command_id id;
-
-  if ((c != ' ') && (c != '\n')){
-    connected_dev.command += c;
-    return;
-  }
-  connected_dev.state = SPECIFIED;
-  execCommands();
-}
-
 
 void  readDeviceName(char c){
 if (c == '\n'){
       connected_dev.read_into = SCREEN;
       connected_dev.state = EMPTY;
       connected_dev.isIdentified = true;
-      printCentered(connected_dev.deviceName.c_str(), ROWS);
+      displayConnectedDeviceName();
       return;
     }
     connected_dev.deviceName += c;
@@ -235,7 +149,7 @@ void  echoToScreen(char c){
       }
       else
         setCursor(cursor_x, cursor_y);
-      putChar('>');
+      putPrompt();
       connected_dev.buffer = "";
       connected_dev.read_into = SCREEN;
       connected_dev.state = EMPTY;
@@ -253,6 +167,8 @@ void verifyInput(char c) {
   // if we need to read into the device name
   if (connected_dev.read_into == DEV_NAME)
     return readDeviceName(c);
+  else if (connected_dev.read_into == COLOR)
+    return readNewTextColor(c);
   // else then we just need to echo into the screen
   echoToScreen(c);
 }
@@ -269,20 +185,12 @@ void initVGA(void) {
   clearScreen(false);
 }
 
-void initCommands(){
-  commands[CLEAR].name = "/clear";
-  commands[CLEAR].handler = execClearScreen;
-  commands[IDENTIFY].name = "/identify";
-  commands[IDENTIFY].handler = execIdentify;
-  commands[PRINT].name = "/print";
-  commands[PRINT].handler = execPrint;
-}
-
 void resetClientData(void){
   connected_dev.buffer.clear();
   connected_dev.deviceIp.clear();
   connected_dev.deviceName.clear();
   connected_dev.isIdentified = false;
+  connected_dev.currentColor = 7;
 }
 
 // ========== Setup ==========
@@ -291,13 +199,10 @@ void setup() {
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED)
     delay(500);
-  // init server
   server.begin();
-  // Initial screen
   initVGA();
   initCommands();
-  connected_dev.isIdentified = false;
-  connected_dev.read_into = NONE;
+  resetClientData();
   showWelcomeScreen();
 }
 
@@ -326,7 +231,7 @@ void loop() {
     connected_dev.deviceIp = client.remoteIP().toString();
     clearScreen(false);
     setCursor(0, 0);
-    putChar('>');
+    putPrompt();
     WELCOME_STATE = false;
   }
   
