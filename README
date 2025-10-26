@@ -9,6 +9,7 @@ Any device on the same network can send commands to **update the VGA text output
 - 🧠 **VGA output** powered directly by the ESP32  
 - 🌐 **TCP-based text protocol** — send commands from any networked device  
 - ⚙️ **Simple integration** — works with `netcat`, `telnet`, or custom clients  
+- 🎨 **Color control** — set text color with a simple command  
 - 🔁 **Live updates** — clear the screen or print text in real time  
 
 ---
@@ -34,9 +35,12 @@ Gives your client a name for easier tracking.
 ### Supported commands
 
 | Command | Description |
-|----------|--------------|
+|----------|-------------|
 | `/clear` | Clears the VGA screen |
 | `/print text` | Prints the rest of the line as text |
+| `/color name` | Sets the current text color. Supported colors: `black`, `blue`, `green`, `cyan`, `red`, `magenta`, `yellow`, `white` |
+
+---
 
 ### 💡 Examples
 
@@ -50,11 +54,43 @@ Gives your client a name for easier tracking.
 /print Hello, world!
 ```
 
+**Change text color:**
+```
+/color red
+/print Warning: Overheating detected!
+```
+
+**Reset color:**
+```
+/color white
+/print Normal operation resumed.
+```
+
 **Using netcat (replace `<IP>` with your ESP32’s address):**
 ```bash
 nc <IP> 1337
 /clear
+/color green
 /print Remote text sent from netcat
+```
+
+---
+
+## 🎨 Color Mapping
+
+Here’s the internal color table used by `/color`:
+
+```c
+_color textColors[8] = {
+  {"black",   {0, 0, 0}},
+  {"blue",    {0, 0, 255}},
+  {"green",   {0, 255, 0}},
+  {"cyan",    {0, 255, 255}},
+  {"red",     {255, 0, 0}},
+  {"magenta", {255, 0, 255}},
+  {"yellow",  {255, 255, 0}},
+  {"white",   {255, 255, 255}},
+};
 ```
 
 ---
@@ -79,6 +115,7 @@ Make sure your `platformio.ini` matches your board and serial port configuration
 - Ensure the ESP32 has a **valid IP address** and is **reachable** from your client device.  
 - Each command must end with a **newline (`\n`)**.  
 - For more robust clients, implement **retries or acknowledgements** if you need reliable delivery.  
+- Use `/color` to highlight different message types (e.g., status updates, errors, info).
 
 ---
 
@@ -86,7 +123,8 @@ Make sure your `platformio.ini` matches your board and serial port configuration
 The project is still evolving! Some planned features include:
 - 📜 **Scrolling text support** — allowing smooth text movement and overflow handling  
 - 🪟 **Split-screen mode** — divide the VGA display into regions for multiple text streams or widgets  
-- 🧩 Potential **new commands** to manage text layout and display zones  
+- 🧩 **Extended color support** — support RGB values or predefined themes  
+- ⚙️ **New commands** for text layout and cursor positioning  
 
 ---
 
@@ -98,3 +136,5 @@ If you add new commands or extend the text protocol, please document them clearl
 
 ## 🧩 License
 MIT License — free to use, modify, and share.
+
+---
