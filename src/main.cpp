@@ -52,6 +52,13 @@ typedef enum READ_DESTANIES{
   NONE,
 } e_read_destanies;
 
+typedef void (*CommandHandler)(void);
+
+typedef struct command{
+  String name;
+  CommandHandler handler;
+} _command;
+
 typedef struct dev {
   String  deviceName;
   String  deviceIp;
@@ -64,7 +71,7 @@ typedef struct dev {
 
 _dev  connected_dev;
 
-String commands[MAX_COMMANDS];
+_command commands[MAX_COMMANDS];
 
 typedef enum COMMAND_ID{
   IDENTIFY,
@@ -72,6 +79,8 @@ typedef enum COMMAND_ID{
   PRINT,
   UNKNOWN
 } e_command_id;
+
+void printCentered(const char* s, int16_t row);
 
 // ========== Helper functions ==========
 void setCursor(int16_t x, int16_t y) {
@@ -84,16 +93,18 @@ void setCursor(int16_t x, int16_t y) {
   # endif
 }
 
-void  clearScreen(void){
+void  clearScreen(bool showIdentified){
   connected_dev.buffer = "";
   setCursor(0, 0);
   videodisplay.clear();
+  if (showIdentified && connected_dev.isIdentified)
+        printCentered(connected_dev.deviceName.c_str(), ROWS);
 }
 
 
 void drawRLEImage(const unsigned char* rle, int width, int height) {
   int x = 0, y = 0;
-  clearScreen();
+  clearScreen(false);
   uint8_t logo_color = 7;
   for (int i = 0; i < 4078; i += 2) {
     uint8_t len = rle[i];
@@ -118,7 +129,7 @@ void moveCursorNext() {
     cursor_y++;
   }
   if (cursor_y >= ROWS) {
-    videodisplay.clear();
+    videodisplay.clear(true);
     cursor_x = 0;
     cursor_y = 0;
   }
@@ -138,8 +149,6 @@ void putStr(const char *s){
   }
 }
 
-
-
 void printCentered(const char* s, int16_t row) {
   videodisplay.setCursor(((COLS / 2) - (strlen(s) / 2)) * 8, row * 8);
   videodisplay.print(s);
@@ -150,11 +159,45 @@ e_command_id  getCommandID(void){
   uint8_t id;
   
   for (id = 0; id < MAX_COMMANDS; id++){
-    if (connected_dev.command == commands[id])
+    if (connected_dev.command == commands[id].name)
       return (e_command_id)id;
   }
 
   return UNKNOWN;
+}
+
+
+void execClearScreen(void){
+  clearScreen(true);
+  putChar('>');
+  connected_dev.state = EMPTY;
+}
+
+void execIdentify(void){
+  if (connected_dev.isIdentified){
+    connected_dev.state = EMPTY;
+    return;
+  }
+  connected_dev.read_into = DEV_NAME;
+  connected_dev.deviceName = "";
+}
+
+void execPrint(void){
+  connected_dev.read_into = SCREEN;
+}
+
+void  execCommands(void) {
+  uint8_t id;
+  
+  for (id = 0; id < MAX_COMMANDS; id++){
+    if (connected_dev.command == commands[id].name){
+      commands[id].handler();
+      break;
+    }
+  }
+  if (id == UNKNOWN)
+    connected_dev.state = EMPTY;
+  connected_dev.command = "";
 }
 
 void handleCommandState(char c){
@@ -165,40 +208,12 @@ void handleCommandState(char c){
     return;
   }
   connected_dev.state = SPECIFIED;
-  id = getCommandID();
-  switch (id){
-    case  CLEAR:
-      clearScreen();
-      putChar('>');
-      connected_dev.state = EMPTY;
-      if (connected_dev.isIdentified)
-        printCentered(connected_dev.deviceName.c_str(), ROWS);
-      break;
-    case  IDENTIFY:
-      if (connected_dev.isIdentified){
-        connected_dev.state = EMPTY;
-        break;
-      }
-      connected_dev.read_into = DEV_NAME;
-      connected_dev.deviceName = "";
-      break;
-    case  PRINT:
-      connected_dev.read_into = SCREEN;
-      break;
-    default:
-      connected_dev.state = EMPTY;
-      break;
-  }
-  connected_dev.command = "";
+  execCommands();
 }
 
-void handleChar(char c) {
-  if (connected_dev.state != SPECIFIED){
-    handleCommandState(c);
-    return ;
-  }
-  if (connected_dev.read_into == DEV_NAME){
-    if (c == '\n'){
+
+void  readDeviceName(char c){
+if (c == '\n'){
       connected_dev.read_into = SCREEN;
       connected_dev.state = EMPTY;
       connected_dev.isIdentified = true;
@@ -207,21 +222,23 @@ void handleChar(char c) {
     }
     connected_dev.deviceName += c;
     return ;
-  }
+}
 
+void  echoToScreen(char c){
   switch (c) {
     case '\n':
       cursor_x = 0;
       cursor_y++;
-      if (cursor_y >= ROWS) {
-        videodisplay.clear();
-        cursor_x = cursor_y = 0;
+      if (cursor_y == ROWS){
+        setCursor(0, 0);
+        clearScreen(true);
       }
-      setCursor(cursor_x, cursor_y);
+      else
+        setCursor(cursor_x, cursor_y);
+      putChar('>');
       connected_dev.buffer = "";
       connected_dev.read_into = SCREEN;
       connected_dev.state = EMPTY;
-      putChar('>');
       break;
     default:
       putChar(c);
@@ -229,8 +246,18 @@ void handleChar(char c) {
   }
 }
 
+void verifyInput(char c) {
+  // still waiting for a valid command
+  if (connected_dev.state != SPECIFIED)
+    return handleCommandState(c);
+  // if we need to read into the device name
+  if (connected_dev.read_into == DEV_NAME)
+    return readDeviceName(c);
+  // else then we just need to echo into the screen
+  echoToScreen(c);
+}
+
 void showWelcomeScreen() {
-  clearScreen();
   drawRLEImage(makersLogo, 640, 400);
 }
 
@@ -239,13 +266,16 @@ void initVGA(void) {
   videodisplay.setFont(CodePage437_8x8);
   videodisplay.init(VGAMode::MODE640x400, RED, GREEN, BLUE, HSYNC, VSYNC);
   videodisplay.setTextColor(videodisplay.RGB(255, 255, 255), videodisplay.RGB(0, 0, 0));
-  clearScreen();
+  clearScreen(false);
 }
 
 void initCommands(){
-  commands[CLEAR] = "/clear";
-  commands[IDENTIFY] = "/identify";
-  commands[PRINT] = "/print";
+  commands[CLEAR].name = "/clear";
+  commands[CLEAR].handler = execClearScreen;
+  commands[IDENTIFY].name = "/identify";
+  commands[IDENTIFY].handler = execIdentify;
+  commands[PRINT].name = "/print";
+  commands[PRINT].handler = execPrint;
 }
 
 void resetClientData(void){
@@ -294,7 +324,7 @@ void loop() {
       return;
     }
     connected_dev.deviceIp = client.remoteIP().toString();
-    clearScreen();
+    clearScreen(false);
     setCursor(0, 0);
     putChar('>');
     WELCOME_STATE = false;
@@ -303,6 +333,6 @@ void loop() {
   // Handle client input
   while (client.available()) {
     char c = client.read();
-    handleChar(c);
+    verifyInput(c);
   }
 }
