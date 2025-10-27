@@ -5,8 +5,21 @@ Any device on the same network can send commands to **update the VGA text output
 
 ---
 
+## 📸 Preview
+
+<table>
+  <tr>
+    <td align="center"><img src="assets/espdisplayer0.jpeg" width="300"/><br><b>VGA Text Test</b></td>
+    <td align="center"><img src="assets/espdisplayer2.jpeg" width="300"/><br><b>ESP32 Board</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/espdisplayer1.jpeg" width="300"/><br><b>VGA Screen back</b></td>
+    <td align="center"><img src="assets/espdisplayer3.jpeg" width="300"/><br><b>VGA Screen front</b></td>
+  </tr>
+</table>
+
 ## ✨ Features
-- 🧠 **VGA output** powered directly by the ESP32  
+- 🧠 **VGA output** powered directly by the ESP32
 - 🌐 **TCP-based text protocol** — send commands from any networked device  
 - ⚙️ **Simple integration** — works with `netcat`, `telnet`, or custom clients  
 - 🎨 **Color control** — set text color with a simple command  
