@@ -190,6 +190,7 @@ void resetClientData(void){
   connected_dev.deviceIp.clear();
   connected_dev.deviceName.clear();
   connected_dev.isIdentified = false;
+  connected_dev.state = EMPTY;
   connected_dev.currentColor = 7;
 }
 
